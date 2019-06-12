@@ -10,7 +10,6 @@ from gensim.models import phrases
 from gensim.corpora import Dictionary
 import pandas as pd
 import numpy as np
-import os.path
 from fopen import Sentences
 from time_wrapper import func_timer
 from config import log, EMBEDDING_LENGTH, SAVED_WORD2VEC_PATH, SAVED_BIGRAM_PATH
@@ -139,7 +138,14 @@ def load_comments(filepath, totalsize, maxlen, dictlen):
             break
     log.info('%+5s out of %+5s in total are full while %s are empty.' % (full, totalsize, empty))
     # print(comments[1401:1408])
-    return comments[:count], sentiments[:count]
+    comments = comments[:count]
+    sentiments = sentiments[:count]
+    randind = np.arange(count)
+    np.random.shuffle(randind)
+
+    comments = comments[randind]
+    sentiments = sentiments[randind]
+    return comments, sentiments
 
 def build_embedding_weight(dictlen, embedding_dim = EMBEDDING_LENGTH):
     """
@@ -251,17 +257,12 @@ class Comprehension_GRU():
 def build_model(maxlen= 128,
                 embedding_dim= 64,
                 dict_len= 4096,
-                stack_2_units_1 = 32,
-                stack_2_units_2 = 8,
+                # stack_2_units_1 = 32,
+                # stack_2_units_2 = 8,
                 stack_1_units = 16,
-                # rnn_units_1= 16,
-                # rnn_units_2= 8,
-                # rnn_units_3 = 16,
-                # rnn_units_4 = 8,
                 rnn_dropout= 0.25,
                 recurrent_dropout= 0.25,
                 embedding_l1= 0.0005,
-                dense_units_1 = 10,
                 lr = 1E-6,
                 ):
     """
@@ -298,9 +299,7 @@ def build_model(maxlen= 128,
 
     # bn = BatchNormalization(axis= 1, center= False, scale= True)(lstm)
     bn_1 = BatchNormalization(axis= 1, center= False, scale= False, name= 'BatchNormaliazation_After_RNN_1')(rnn_1)
-    dense_1 = Dense(units= dense_units_1, activation= 'tanh', name= 'Dense_1')(bn_1)
-    bn_2 = BatchNormalization(axis= 1, center= False, scale= False, name= 'BatchNormalization_After_RNN_2')(dense_1)
-    sent = Dense(units= 1, activation= 'sigmoid', name='Dense_2')(bn_2)
+    sent = Dense(units= 1, activation= 'sigmoid', name='Dense_1')(bn_1)
 
     model = Model(inputs= input, outputs= sent)
     adam = Adam(lr, clipnorm = 10, clipvalue = 5)
@@ -339,12 +338,12 @@ def main():
                 ('dict_len', [dictlen, ]),
                 # ('rnn_units_1', [32, ]),
                 # ('rnn_units_2', [24, ]),
-                ('stack_2_units_1', [12,]),
-                ('stack_2_units_2', [4, ]),
+                # ('stack_2_units_1', [12,]),
+                # ('stack_2_units_2', [4, ]),
                 ('stack_1_units', [6,]),
-                ('dense_units_1', [10, ]),
+                # ('dense_units_1', [32, ]),
                 # ('rnn_units_3', [8,]),
-                ('rnn_dropout', [0.4, ]),
+                ('rnn_dropout', [0.6, ]),
                 ('recurrent_dropout', [0.25, ]),
                 ('embedding_l1', [1E-7,  ]),
                 ("lr", [1E-2, ])
@@ -355,7 +354,7 @@ def main():
     ]
 
     # 以下为模型训练时所需超参数
-    val_split=0.2
+    val_split= 0.1
     reduceLR_factor=0.25
 
     # 以下为其他参数
@@ -387,7 +386,7 @@ def main():
                   batch_size= batchsize,
                   epochs= epochs,
                   callbacks= [TensorBoard(log_dir= './logs_2/' + config_str, batch_size= batchsize, write_graph= False),
-                              EarlyStopping(monitor= 'val_binary_accuracy', patience= 5, mode= 'max'),
+                              EarlyStopping(monitor= 'val_binary_accuracy', patience= 10, mode= 'max'),
                               ReduceLROnPlateau(monitor= 'val_loss', factor= reduceLR_factor, patience= 3, mode= 'min', cooldown= 0)
                               ],
                   # validation_data= (comments_val, sentiment_val),
