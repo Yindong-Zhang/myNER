@@ -17,19 +17,7 @@ import gc
 from itertools import product
 from collections import OrderedDict
 from keras.backend.tensorflow_backend import clear_session
-
-def gridsearch(para_gird):
-    '''
-    This function take a parameter grid which is a list of parameter dictionary {param_key: param_value_list}
-    :param para_gird:
-    :return: an parameter grid search iterator
-    '''
-    for hyperpara in para_gird:
-        keys = hyperpara.keys()
-        values_list = hyperpara.values()
-        # log.debug('Keys: %s \n Values: %s' %(keys, values_list))
-        for values in product(*values_list):
-            yield OrderedDict(zip(keys, values))
+from gridsearch import grid_search
 
 def test_data_generator(maxlen, totalsize):
     comments = np.random.random(size=(totalsize ,maxlen))
@@ -147,6 +135,63 @@ def load_comments(filepath, totalsize, maxlen, dictlen):
     sentiments = sentiments[randind]
     return comments, sentiments
 
+def load_test(filepath, totalsize, maxlen, dictlen):
+    wordvec = keyedvectors.KeyedVectors.load(SAVED_WORD2VEC_PATH)
+    vocabulary = wordvec.vocab
+    log.info('Length of vocabulary: %s' % len(vocabulary))
+    index2word = wordvec.index2word
+    log.info('The first %d most frequent words selected, word with frequency under %d discarded.' %(dictlen, vocabulary[index2word[dictlen]].count))
+    assert dictlen == vocabulary[index2word[dictlen]].index
+
+    bigramer = phrases.Phraser.load(SAVED_BIGRAM_PATH)
+
+    sentences = Sentences(filename= filepath, loop= False)
+    comments = np.zeros(shape= (totalsize, maxlen), dtype= np.float32)
+    ind = np.zeros(shape = (totalsize, 1), dtype= np.int32)
+    count = 0
+    full = 0
+    empty = 0
+    for i, sentence in enumerate(sentences):
+        if len(sentence) == 0:
+            print("Zero length sentences encountered: %s" %(i + 1, ))
+            continue
+
+        sentence= bigramer[sentence]
+
+
+        log.debug('Length of sentence: %+3s' % len(sentence))
+        j = 0
+        for word in sentence:
+            word_info = vocabulary.get(word)
+            if word_info:
+                word_id = word_info.index
+                if word_id < dictlen:
+                    comments[count, j] = word_id + 1
+                    log.debug('The %+5s-th wordvector[%+2s] in one-hot representation: %+5s' % (count, j, word_id))
+                    j += 1
+            else:
+                continue
+            if j == maxlen:
+                full += 1
+                break
+
+        if j == 0:
+            print("Sentence %s is empty after processing." %(i + 1, ))
+            empty += 1
+        else:
+            # if 1403 < count < 1409:
+            #     print(count, sentence, comments[count])
+            ind[count] = i + 1
+            count += 1
+        if count == totalsize:
+            break
+    log.info('%+5s out of %+5s in total are full while %s are empty.' % (full, totalsize, empty))
+    # print(comments[1401:1408])
+    inds = ind[:count]
+    comments = comments[:count]
+    return inds, comments
+
+
 def build_embedding_weight(dictlen, embedding_dim = EMBEDDING_LENGTH):
     """
     该函数从word2vec 模型中加载 训练好的 embedded vectors.
@@ -262,7 +307,7 @@ def build_model(maxlen= 128,
                 stack_1_units = 16,
                 rnn_dropout= 0.25,
                 recurrent_dropout= 0.25,
-                embedding_l1= 0.0005,
+                embedding_l= 0.0005,
                 lr = 1E-6,
                 ):
     """
@@ -274,7 +319,7 @@ def build_model(maxlen= 128,
     :param rnn_units_2:
     :param rnn_dropout:
     :param recurrent_dropout:
-    :param embedding_l1:
+    :param embedding_l:
     :param dense_units_1:
     :return:
     """
@@ -282,7 +327,7 @@ def build_model(maxlen= 128,
 
     input = Input(shape= (maxlen,),name= 'Input', dtype= np.int32)
     # model_input = Lambda(lambda x: K.print_tensor(x, message= "model_input: "), name= "print")(input)
-    embedded = Embedding(input_dim= dict_len + 1, output_dim= embedding_dim, embeddings_regularizer= regularizers.l1(l = embedding_l1), name='Embedding', mask_zero= True,
+    embedded = Embedding(input_dim= dict_len + 1, output_dim= embedding_dim, embeddings_regularizer= regularizers.l2(embedding_l), name='Embedding', mask_zero= True,
                          weights= build_embedding_weight(dict_len, embedding_dim)
                          )(input)
     # embedded = Lambda(lambda x: K.print_tensor(x, message= "after_embedding: "), name= "print_1")(embedded)
@@ -299,7 +344,8 @@ def build_model(maxlen= 128,
 
     # bn = BatchNormalization(axis= 1, center= False, scale= True)(lstm)
     bn_1 = BatchNormalization(axis= 1, center= False, scale= False, name= 'BatchNormaliazation_After_RNN_1')(rnn_1)
-    sent = Dense(units= 1, activation= 'sigmoid', name='Dense_1')(bn_1)
+    dense_1 = Dense(units= 32, activation= 'tanh', name= "Dense2")(bn_1)
+    sent = Dense(units= 1, activation= 'sigmoid', name='Dense_1')(dense_1)
 
     model = Model(inputs= input, outputs= sent)
     adam = Adam(lr, clipnorm = 10, clipvalue = 5)
@@ -324,7 +370,7 @@ def main():
     totalsize = 6328
     maxlen = 32
     embedding_dim = EMBEDDING_LENGTH
-    dictlen = 3600
+    dictlen = 4096
 
     # 以下为构建模型的超参数
     hyperparas = [
@@ -340,13 +386,13 @@ def main():
                 # ('rnn_units_2', [24, ]),
                 # ('stack_2_units_1', [12,]),
                 # ('stack_2_units_2', [4, ]),
-                ('stack_1_units', [6,]),
+                ('stack_1_units', [32,]),
                 # ('dense_units_1', [32, ]),
                 # ('rnn_units_3', [8,]),
                 ('rnn_dropout', [0.6, ]),
-                ('recurrent_dropout', [0.25, ]),
-                ('embedding_l1', [1E-7,  ]),
-                ("lr", [1E-2, ])
+                ('recurrent_dropout', [0.6, ]),
+                ('embedding_l', [1E-6,  ]),
+                ("lr", [5E-3, ])
 
             ]
         ),
@@ -367,11 +413,9 @@ def main():
         filepath= "./data/train_input.csv", totalsize= totalsize, maxlen = maxlen, dictlen= dictlen)
     log.info('Loading data conclude.')
 
-    # 测试数据：
-    # comments, sentiment = test_data_generator(maxlen= maxlen, totalsize= 2000)
-    # comments_val, sentiment_val = test_data_generator(maxlen= maxlen,totalsize= 1000)
 
-    for kwargs in gridsearch(hyperparas):
+
+    for kwargs in grid_search(hyperparas):
         log.info('keyword args: %s' % kwargs)
         config_str = make_config_str(kwargs)
         config_str += '-Comprehension_DSN'
@@ -385,7 +429,7 @@ def main():
                   y= sentiment,
                   batch_size= batchsize,
                   epochs= epochs,
-                  callbacks= [TensorBoard(log_dir= './logs_2/' + config_str, batch_size= batchsize, write_graph= False),
+                  callbacks= [TensorBoard(log_dir= './logs_3/' + config_str, batch_size= batchsize, write_graph= False),
                               EarlyStopping(monitor= 'val_binary_accuracy', patience= 10, mode= 'max'),
                               ReduceLROnPlateau(monitor= 'val_loss', factor= reduceLR_factor, patience= 3, mode= 'min', cooldown= 0)
                               ],
@@ -393,6 +437,7 @@ def main():
                   validation_split= val_split,
                   shuffle= True,
                   )
+
         log.info('fitting conclude.')
 
         # 保存模型
@@ -472,7 +517,11 @@ if __name__ == '__main__':
 
 
     # weight = build_embedding_weight(100, EMBEDDING_LENGTH)
-    # comments, sentiments = load_comments('aclImdb/train/pos', maxlen= 256, totalsize= 10, dictlen= DICTLENGTH)
+    inds, comments= load_test("./data/test_input_0610.csv", maxlen= 32, totalsize= 2712, dictlen= 4096)
+    for i, c in zip(inds, comments):
+        print(i, c)
+        # if i > 200:
+        #     break
     # log.info(comments.shape)
-    main()
+    # main()
     # build_model()

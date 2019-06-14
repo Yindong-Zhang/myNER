@@ -9,7 +9,7 @@ plt.style.use('seaborn')
 def make_bigram(dirpaths):
     sentences = corpora(dirpaths, loop_or_not= False)
     print('Start phrasing:')
-    phrase = phrases.Phrases(sentences, max_vocab_size= DICTLENGTH,  min_count = 1, common_terms={'of', 'and', 'the', 'with'})
+    phrase = phrases.Phrases(sentences, max_vocab_size= DICTLENGTH,  min_count = 1, threshold= 5,  common_terms={'of', 'and', 'the', 'with'})
     bigram = phrases.Phraser(phrase)
     bigram.save(SAVED_BIGRAM_PATH)
     print('bigram phraser saved conclude.')
@@ -25,13 +25,13 @@ class Bigramer():
         """
         self.filepath = filepath
         self.loop_or_not = loop
+        self.bigramer = phrases.Phraser.load(SAVED_BIGRAM_PATH)
 
     def __iter__(self):
         sentences = corpora(self.filepath, loop_or_not= self.loop_or_not)
         print('reload bigram...')
-        bigram = phrases.Phraser.load(SAVED_BIGRAM_PATH)
         for sentence in sentences:
-            yield bigram[sentence]
+            yield self.bigramer[sentence]
 
 def make_wordvec():
     """
@@ -52,10 +52,10 @@ def make_wordvec():
                               negative= 8,
                               sample= 1e-3,
                               workers= 4,
-                              min_count=4,
+                              min_count= 2,
                               sorted_vocab= 1,)
     model.build_vocab(sentences= bigram_comments)
-    model.train(bigram_comments, total_examples= model.corpus_count, epochs= 64, compute_loss= True)
+    model.train(bigram_comments, total_examples= model.corpus_count, epochs= 128, compute_loss= True)
     print('finish training.')
     if os.path.exists(SAVED_WORD2VEC_PATH):
         os.remove(SAVED_WORD2VEC_PATH)
