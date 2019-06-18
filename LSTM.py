@@ -181,7 +181,7 @@ def load_test(filepath, totalsize, maxlen, dictlen):
         else:
             # if 1403 < count < 1409:
             #     print(count, sentence, comments[count])
-            ind[count] = i + 1
+            ind[count] = i
             count += 1
         if count == totalsize:
             break
@@ -368,9 +368,10 @@ def main():
     # 所有的参数都在这里～～
     # 以下为载入数据时的超参数
     totalsize = 6328
+    test_size= 2712
     maxlen = 32
     embedding_dim = EMBEDDING_LENGTH
-    dictlen = 4096
+    dictlen = 6000
 
     # 以下为构建模型的超参数
     hyperparas = [
@@ -391,8 +392,8 @@ def main():
                 # ('rnn_units_3', [8,]),
                 ('rnn_dropout', [0.6, ]),
                 ('recurrent_dropout', [0.6, ]),
-                ('embedding_l', [1E-6,  ]),
-                ("lr", [5E-3, ])
+                ('embedding_l', [1E-6,]),
+                ("lr", [3E-3, ])
 
             ]
         ),
@@ -401,7 +402,7 @@ def main():
 
     # 以下为模型训练时所需超参数
     val_split= 0.1
-    reduceLR_factor=0.25
+    reduceLR_factor= 0.25
 
     # 以下为其他参数
     batchsize = 32
@@ -413,7 +414,7 @@ def main():
         filepath= "./data/train_input.csv", totalsize= totalsize, maxlen = maxlen, dictlen= dictlen)
     log.info('Loading data conclude.')
 
-
+    test_inds, test_x = load_test("./data/test_input_0610.csv", totalsize= test_size, maxlen= maxlen, dictlen = dictlen)
 
     for kwargs in grid_search(hyperparas):
         log.info('keyword args: %s' % kwargs)
@@ -437,9 +438,14 @@ def main():
                   validation_split= val_split,
                   shuffle= True,
                   )
-
         log.info('fitting conclude.')
 
+        test_pred = model.predict(test_x)
+        test_out = np.random.rand(test_size)
+        test_out[test_inds] = test_pred
+        test_df = pd.DataFrame({"ID": np.arange(1, test_size + 1), "Pred": test_out})
+        test_df.to_csv("./data/submission_%s.csv" %(config_str, ), index= False)
+        print("predict saved.")
         # 保存模型
         model.save( 'saved_models/' + config_str )
         clear_session()
@@ -517,11 +523,11 @@ if __name__ == '__main__':
 
 
     # weight = build_embedding_weight(100, EMBEDDING_LENGTH)
-    inds, comments= load_test("./data/test_input_0610.csv", maxlen= 32, totalsize= 2712, dictlen= 4096)
-    for i, c in zip(inds, comments):
-        print(i, c)
+    # inds, comments= load_test("./data/test_input_0610.csv", maxlen= 32, totalsize= 2712, dictlen= 4096)
+    # for i, c in zip(inds, comments):
+    #     print(i, c)
         # if i > 200:
         #     break
     # log.info(comments.shape)
-    # main()
+    main()
     # build_model()
