@@ -1,6 +1,6 @@
 from gensim.models import keyedvectors, phrases
 import  logging
-import fopen
+import corpora
 import  sys
 
 log = logging.getLogger(name= __name__)
@@ -22,7 +22,7 @@ def LengthStat():
     # log.debug(word_vector['good'])
     # log.info('WordVector loaded succeed!')
     max_len = 0
-    for line  in fopen.Sentences('aclImdb/train/pos', False):
+    for line  in corpora.Sentences('aclImdb/train/pos', False):
         comment = bigram[line]
         print(len(comment))
         max_len = len(comment) if len(comment) > max_len else max_len

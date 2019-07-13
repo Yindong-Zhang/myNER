@@ -1,4 +1,4 @@
-from fopen import Sentences, corpora
+from corpora import Sentences, corpora
 from gensim.models import phrases, word2vec, KeyedVectors
 from gensim.corpora import Dictionary
 from config import SAVED_BIGRAM_PATH, SAVED_WORD2VEC_PATH, SAVED_DICT_PATH, DICTLENGTH, EMBEDDING_LENGTH
@@ -33,14 +33,15 @@ class Bigramer():
         for sentence in sentences:
             yield self.bigramer[sentence]
 
-def make_wordvec():
+def make_wordvec(filepath, use_bigram= False):
     """
     本函数进行 word2vec 训练, 并将对应的模型保存到 SAVED_WORD2VEC_PATH
     :return: None
     """
-    filepath = './data/train_input.csv'
-    bigram_comments = Bigramer(filepath, loop= False)
-
+    if use_bigram:
+        sentences = Bigramer(filepath, loop= False)
+    else:
+        sentences = corpora(filepath, loop_or_not= False)
     vec_size = EMBEDDING_LENGTH
 
     print('start training word2vec...')
@@ -51,11 +52,12 @@ def make_wordvec():
                               hs= 0,
                               negative= 8,
                               sample= 1e-3,
-                              workers= 4,
+                              workers= 32,
                               min_count= 2,
-                              sorted_vocab= 1,)
-    model.build_vocab(sentences= bigram_comments)
-    model.train(bigram_comments, total_examples= model.corpus_count, epochs= 128, compute_loss= True)
+                              sorted_vocab= 1,
+                              )
+    model.build_vocab(sentences= sentences)
+    model.train(sentences, total_examples= model.corpus_count, epochs= 256, compute_loss= True)
     print('finish training.')
     if os.path.exists(SAVED_WORD2VEC_PATH):
         os.remove(SAVED_WORD2VEC_PATH)
@@ -96,7 +98,7 @@ def comments2Onehotvector(dictlen):
     dict.save(SAVED_DICT_PATH)
 
 def main():
-    filepath = "./data/train_input.csv"
+    filepath = "./data/corpus.txt"
     make_bigram(filepath)
     bigram_comments = Bigramer(filepath, loop=False)
     for count, comment in enumerate(bigram_comments):
@@ -125,4 +127,5 @@ def main():
     # log.info(kv.similar_by_word('beautiful'))
 
 if __name__ == '__main__':
-    main()
+    # main()
+    make_wordvec("./data/corpus.txt", use_bigram= False)

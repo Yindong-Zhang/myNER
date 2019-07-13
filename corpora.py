@@ -5,7 +5,7 @@ from time_wrapper import func_timer
 import os
 import random
 from itertools import cycle
-from config import log
+from config import DATAPATH
 import re
 # from timeit import Timer
 
@@ -46,7 +46,7 @@ class Sentences():
         """
         self.filename = filename
         self.loop = loop
-        self.sentences = pd.read_csv(filename, usecols= ['comment', ], squeeze= True)
+        self.sentences = open(self.filename, "r")
 
     # 这不是一个迭代器，但是一个可迭代对象。
     # 通过 self.loop 标志 确定是否循环迭代
@@ -55,7 +55,7 @@ class Sentences():
         if self.loop:
             self.sentences = cycle(self.sentences)
         for line in self.sentences:
-            wordlist = re.findall("\w+'\w+|\w+|[,.:?]", line)
+            wordlist = line.split('_')
             yield wordlist
 
 def corpora(filename, loop_or_not):
@@ -86,7 +86,7 @@ if __name__ == '__main__':
     # log.debug('comment after split: %s' % wordlist)
     # log.debug('comment after split: %s' % ' '.join(wordlist))
 
-    sentences = Sentences('./data/train_input.csv', loop= True)
+    sentences = Sentences('./data/corpus.txt', loop= True)
     for count, sentence in enumerate(sentences):
         print(len(sentence))
         print(' '.join(sentence))

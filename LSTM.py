@@ -10,7 +10,7 @@ from gensim.models import phrases
 from gensim.corpora import Dictionary
 import pandas as pd
 import numpy as np
-from fopen import Sentences
+from corpora import Sentences
 from time_wrapper import func_timer
 from config import log, EMBEDDING_LENGTH, SAVED_WORD2VEC_PATH, SAVED_BIGRAM_PATH
 import gc

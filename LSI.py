@@ -1,4 +1,4 @@
-from fopen import corpora, Sentences
+from corpora import corpora, Sentences
 from gensim.models import TfidfModel,LsiModel
 from gensim.corpora import Dictionary
 import pandas as pd
